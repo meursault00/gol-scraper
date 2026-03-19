@@ -54,7 +54,8 @@ gol-scraper/
 │   └── index.html          # Frontend estático
 ├── scripts/
 │   ├── setup.sh            # Setup del workspace
-│   └── run.sh              # Ejecución del pipeline
+│   ├── run.sh              # Ejecución del pipeline
+│   └── archive.sh          # Pre-archive: snapshot DB, cleanup
 ├── data/
 │   └── listings.db         # SQLite (gitignored)
 └── logs/                   # Logs de ejecución (gitignored)
@@ -72,6 +73,12 @@ gol-scraper/
 
 ```bash
 ./scripts/run.sh
+```
+
+### Archive (pre-archive de workspace)
+
+```bash
+./scripts/archive.sh
 ```
 
 ### Ejecución manual

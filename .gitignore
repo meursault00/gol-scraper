@@ -7,7 +7,9 @@ __pycache__/
 
 # Data & logs
 data/*.db
+data/archives/
 logs/*.log
+logs/*.log.gz
 
 # Environment
 .env
