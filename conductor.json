@@ -1,31 +1,9 @@
 {
   "name": "gol-scraper",
   "description": "Scraper de autos VW Gol/Gol Trend usados en AMBA con scoring IA",
-  "workspaces": {
-    "scraper-mercadolibre": {
-      "description": "Scraper de MercadoLibre via API publica REST",
-      "path": "scrapers/mercadolibre.py",
-      "depends_on": ["config", "db"]
-    },
-    "scraper-kavak": {
-      "description": "Scraper de Kavak via API interna",
-      "path": "scrapers/kavak.py",
-      "depends_on": ["config", "db"]
-    },
-    "scoring": {
-      "description": "Sistema de scoring numerico + analisis de fotos con Claude API",
-      "path": "scoring/",
-      "depends_on": ["db"]
-    },
-    "frontend": {
-      "description": "Frontend HTML estatico con tabla ordenable de resultados",
-      "path": "frontend/",
-      "depends_on": ["db", "export"]
-    }
-  },
-  "pipeline": {
-    "parallel": ["scraper-mercadolibre", "scraper-kavak"],
-    "then": ["scoring"],
-    "finally": ["frontend"]
+  "scripts": {
+    "setup": "python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt && mkdir -p data logs && ln -sf \"$CONDUCTOR_ROOT_PATH/.env\" .env",
+    "run": "source .venv/bin/activate && python runner.py",
+    "archive": "rm -rf .venv __pycache__ scrapers/__pycache__ scoring/__pycache__ converter/__pycache__"
   }
 }

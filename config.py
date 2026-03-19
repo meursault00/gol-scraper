@@ -1,5 +1,8 @@
 """Configuración global del scraper."""
 
+# Feature flags
+ENABLE_PHOTO_ANALYSIS = False  # Análisis de fotos con Claude API
+
 # Búsqueda
 SEARCH_QUERY = "volkswagen gol"
 CATEGORY_ID = "MLA1744"  # Autos y Camionetas
