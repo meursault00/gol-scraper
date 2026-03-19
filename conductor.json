@@ -1,0 +1,31 @@
+{
+  "name": "gol-scraper",
+  "description": "Scraper de autos VW Gol/Gol Trend usados en AMBA con scoring IA",
+  "workspaces": {
+    "scraper-mercadolibre": {
+      "description": "Scraper de MercadoLibre via API publica REST",
+      "path": "scrapers/mercadolibre.py",
+      "depends_on": ["config", "db"]
+    },
+    "scraper-kavak": {
+      "description": "Scraper de Kavak via API interna",
+      "path": "scrapers/kavak.py",
+      "depends_on": ["config", "db"]
+    },
+    "scoring": {
+      "description": "Sistema de scoring numerico + analisis de fotos con Claude API",
+      "path": "scoring/",
+      "depends_on": ["db"]
+    },
+    "frontend": {
+      "description": "Frontend HTML estatico con tabla ordenable de resultados",
+      "path": "frontend/",
+      "depends_on": ["db", "export"]
+    }
+  },
+  "pipeline": {
+    "parallel": ["scraper-mercadolibre", "scraper-kavak"],
+    "then": ["scoring"],
+    "finally": ["frontend"]
+  }
+}
