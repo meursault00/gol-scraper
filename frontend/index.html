@@ -4,9 +4,193 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VW Gol Scraper - Resultados</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; color: #333; padding: 20px; }
+        h1 { margin-bottom: 8px; }
+        .meta { color: #666; margin-bottom: 20px; font-size: 14px; }
+
+        .filters { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; align-items: center; }
+        .filters label { font-size: 14px; font-weight: 500; }
+        .filters input, .filters select { padding: 6px 10px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
+        .filters input[type="number"] { width: 100px; }
+
+        table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        th { background: #2c3e50; color: white; padding: 10px 12px; text-align: left; cursor: pointer; user-select: none; font-size: 13px; white-space: nowrap; }
+        th:hover { background: #34495e; }
+        th .arrow { margin-left: 4px; font-size: 10px; }
+        td { padding: 8px 12px; border-bottom: 1px solid #eee; font-size: 13px; vertical-align: middle; }
+        tr:hover { background: #f0f7ff; }
+
+        .thumb { width: 80px; height: 60px; object-fit: cover; border-radius: 4px; }
+        .score-bar { width: 60px; height: 8px; background: #eee; border-radius: 4px; display: inline-block; vertical-align: middle; margin-right: 6px; }
+        .score-fill { height: 100%; border-radius: 4px; }
+        .score-high { background: #27ae60; }
+        .score-mid { background: #f39c12; }
+        .score-low { background: #e74c3c; }
+        a { color: #2980b9; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+
+        .source-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
+        .source-mercadolibre { background: #fff3cd; color: #856404; }
+        .source-kavak { background: #d4edda; color: #155724; }
+
+        .no-results { text-align: center; padding: 40px; color: #999; }
+        .count { font-size: 14px; color: #666; margin-bottom: 10px; }
+    </style>
 </head>
 <body>
-    <h1>VW Gol Scraper - Resultados</h1>
-    <!-- TODO: tabla ordenable con resultados -->
+    <h1>VW Gol Scraper</h1>
+    <div class="meta" id="meta"></div>
+
+    <div class="filters">
+        <label>Precio USD:
+            <input type="number" id="priceMin" placeholder="Min" step="500">
+            –
+            <input type="number" id="priceMax" placeholder="Max" step="500">
+        </label>
+        <label>Año:
+            <input type="number" id="yearMin" placeholder="Min">
+            –
+            <input type="number" id="yearMax" placeholder="Max">
+        </label>
+        <label>Km máx:
+            <input type="number" id="kmMax" placeholder="Max" step="10000">
+        </label>
+        <label>Fuente:
+            <select id="sourceFilter">
+                <option value="">Todas</option>
+                <option value="mercadolibre">MercadoLibre</option>
+                <option value="kavak">Kavak</option>
+            </select>
+        </label>
+        <label>Buscar:
+            <input type="text" id="searchText" placeholder="Título...">
+        </label>
+    </div>
+
+    <div class="count" id="count"></div>
+    <table>
+        <thead>
+            <tr>
+                <th data-key="thumbnail_url"></th>
+                <th data-key="score">Score <span class="arrow"></span></th>
+                <th data-key="title">Título <span class="arrow"></span></th>
+                <th data-key="price_usd">USD <span class="arrow"></span></th>
+                <th data-key="year">Año <span class="arrow"></span></th>
+                <th data-key="km">Km <span class="arrow"></span></th>
+                <th data-key="doors">Puertas <span class="arrow"></span></th>
+                <th data-key="location">Ubicación <span class="arrow"></span></th>
+                <th data-key="source">Fuente <span class="arrow"></span></th>
+            </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+    </table>
+    <div class="no-results" id="noResults" style="display:none">No se encontraron resultados con esos filtros.</div>
+
+    <script>
+    let listings = [];
+    let sortKey = "score";
+    let sortAsc = false;
+
+    async function loadData() {
+        try {
+            const resp = await fetch("../data/results.json");
+            const data = await resp.json();
+            listings = data.listings || [];
+            document.getElementById("meta").textContent =
+                `Generado: ${new Date(data.generated_at).toLocaleString("es-AR")} · ${data.count} listings`;
+            render();
+        } catch (e) {
+            document.getElementById("meta").textContent = "Error cargando datos. Ejecutá el scraper primero.";
+        }
+    }
+
+    function getFiltered() {
+        const priceMin = parseFloat(document.getElementById("priceMin").value) || 0;
+        const priceMax = parseFloat(document.getElementById("priceMax").value) || Infinity;
+        const yearMin = parseInt(document.getElementById("yearMin").value) || 0;
+        const yearMax = parseInt(document.getElementById("yearMax").value) || Infinity;
+        const kmMax = parseInt(document.getElementById("kmMax").value) || Infinity;
+        const source = document.getElementById("sourceFilter").value;
+        const search = document.getElementById("searchText").value.toLowerCase();
+
+        return listings.filter(l => {
+            if (l.price_usd != null && (l.price_usd < priceMin || l.price_usd > priceMax)) return false;
+            if (l.year != null && (l.year < yearMin || l.year > yearMax)) return false;
+            if (l.km != null && l.km > kmMax) return false;
+            if (source && l.source !== source) return false;
+            if (search && !(l.title || "").toLowerCase().includes(search)) return false;
+            return true;
+        });
+    }
+
+    function sortData(data) {
+        return [...data].sort((a, b) => {
+            let va = a[sortKey], vb = b[sortKey];
+            if (va == null) va = sortAsc ? Infinity : -Infinity;
+            if (vb == null) vb = sortAsc ? Infinity : -Infinity;
+            if (typeof va === "string") return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+            return sortAsc ? va - vb : vb - va;
+        });
+    }
+
+    function render() {
+        const filtered = sortData(getFiltered());
+        const tbody = document.getElementById("tbody");
+        const noResults = document.getElementById("noResults");
+        document.getElementById("count").textContent = `Mostrando ${filtered.length} de ${listings.length} listings`;
+
+        if (filtered.length === 0) {
+            tbody.innerHTML = "";
+            noResults.style.display = "block";
+            return;
+        }
+        noResults.style.display = "none";
+
+        tbody.innerHTML = filtered.map(l => `<tr>
+            <td>${l.thumbnail_url ? `<img class="thumb" src="${escapeAttr(l.thumbnail_url)}" loading="lazy" alt="">` : "—"}</td>
+            <td>${scoreBar(l.score)}</td>
+            <td><a href="${escapeAttr(l.url)}" target="_blank" rel="noopener">${esc(l.title)}</a></td>
+            <td>${l.price_usd != null ? "$" + l.price_usd.toLocaleString("es-AR") : "—"}</td>
+            <td>${l.year ?? "—"}</td>
+            <td>${l.km != null ? l.km.toLocaleString("es-AR") : "—"}</td>
+            <td>${l.doors ?? "—"}</td>
+            <td>${esc(l.location || "—")}</td>
+            <td><span class="source-badge source-${l.source}">${esc(l.source)}</span></td>
+        </tr>`).join("");
+
+        // Actualizar flechas
+        document.querySelectorAll("th .arrow").forEach(el => el.textContent = "");
+        const activeHeader = document.querySelector(`th[data-key="${sortKey}"] .arrow`);
+        if (activeHeader) activeHeader.textContent = sortAsc ? "▲" : "▼";
+    }
+
+    function scoreBar(score) {
+        if (score == null) return "—";
+        const pct = Math.round(score * 100);
+        const cls = score >= 0.7 ? "score-high" : score >= 0.4 ? "score-mid" : "score-low";
+        return `<span class="score-bar"><span class="score-fill ${cls}" style="width:${pct}%"></span></span>${pct}%`;
+    }
+
+    function esc(s) { const d = document.createElement("div"); d.textContent = s || ""; return d.innerHTML; }
+    function escapeAttr(s) { return (s || "").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+    // Event listeners
+    document.querySelectorAll("th[data-key]").forEach(th => {
+        th.addEventListener("click", () => {
+            const key = th.dataset.key;
+            if (key === "thumbnail_url") return;
+            if (sortKey === key) { sortAsc = !sortAsc; } else { sortKey = key; sortAsc = false; }
+            render();
+        });
+    });
+
+    document.querySelectorAll(".filters input, .filters select").forEach(el => {
+        el.addEventListener("input", render);
+    });
+
+    loadData();
+    </script>
 </body>
 </html>

@@ -22,6 +22,11 @@ def calculate_score(listing: dict) -> dict:
     details["year"] = _score_year(listing.get("year"))
     details["doors"] = _score_doors(listing.get("doors"))
 
+    if config.ENABLE_PHOTO_ANALYSIS:
+        score_details = listing.get("score_details") or {}
+        photo_analysis = score_details.get("photo_analysis", {})
+        details["photos"] = photo_analysis.get("photo_score", 0.5)
+
     total = sum(weights.get(k, 0) * details[k] for k in details)
     return {"score": round(total, 4), "details": details}
 

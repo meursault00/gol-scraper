@@ -139,6 +139,19 @@ def increment_missed_runs(conn, source: str, seen_ids: set) -> int:
     return deactivated
 
 
+def update_photo_analysis(conn, listing_id: str, analysis: dict):
+    """Guarda el resultado del análisis de fotos en score_details."""
+    row = conn.execute(
+        "SELECT score_details FROM listings WHERE id = ?", (listing_id,)
+    ).fetchone()
+    existing = json.loads(row["score_details"]) if row and row["score_details"] else {}
+    existing["photo_analysis"] = analysis
+    conn.execute(
+        "UPDATE listings SET score_details = ? WHERE id = ?",
+        (json.dumps(existing), listing_id),
+    )
+
+
 def update_scores(conn, scores: list[dict]):
     """Actualiza score y score_details en batch."""
     for s in scores:

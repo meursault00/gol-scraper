@@ -5,10 +5,14 @@ import os
 import sys
 from datetime import datetime
 
+import config
 import db
 import export
+from converter.currency import convert_listings
 from scrapers.mercadolibre import MercadoLibreScraper
+from scrapers.kavak import KavakScraper
 from scoring.calculator import calculate_score
+from scoring.photo_analyzer import analyze_photos
 
 os.makedirs("logs", exist_ok=True)
 
@@ -30,7 +34,7 @@ def main():
     db.init_db()
 
     # 2. Scrapear
-    scrapers = [MercadoLibreScraper()]
+    scrapers = [MercadoLibreScraper(), KavakScraper()]
     all_listings = []
 
     for scraper in scrapers:
@@ -47,20 +51,37 @@ def main():
         logger.warning("No se scrapearon listings, saliendo.")
         return
 
-    # 3. Deduplicar y guardar
+    # 3. Convertir precios ARS → USD
+    convert_listings(all_listings)
+
+    # 4. Deduplicar y guardar
     seen_ids = set()
     with db.get_connection() as conn:
         for listing in all_listings:
             lid = db.upsert_listing(conn, listing)
             seen_ids.add(lid)
 
-        # 4. Marcar listings desaparecidos
+        # 5. Marcar listings desaparecidos
         for scraper in scrapers:
             deactivated = db.increment_missed_runs(conn, scraper.source_name, seen_ids)
             if deactivated:
                 logger.info(f"Desactivados {deactivated} listings de {scraper.source_name}")
 
-        # 5. Scoring
+        # 6. Análisis de fotos (si está habilitado)
+        if config.ENABLE_PHOTO_ANALYSIS:
+            active = db.get_all_active(conn)
+            analyzed = 0
+            for listing in active:
+                photos = listing.get("photos", [])
+                if photos:
+                    result = analyze_photos(photos)
+                    if result:
+                        db.update_photo_analysis(conn, listing["id"], result)
+                        analyzed += 1
+            if analyzed:
+                logger.info(f"Analizadas fotos de {analyzed} listings")
+
+        # 7. Scoring
         active = db.get_all_active(conn)
         scores = []
         for listing in active:
@@ -72,7 +93,7 @@ def main():
             })
         db.update_scores(conn, scores)
 
-        # 6. Exportar
+        # 8. Exportar
         final = db.get_all_active(conn)
 
     export.export_csv(final)
