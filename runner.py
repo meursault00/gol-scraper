@@ -13,6 +13,7 @@ from scrapers.mercadolibre import MercadoLibreScraper
 from scrapers.kavak import KavakScraper
 from scoring.calculator import calculate_score
 from scoring.photo_analyzer import analyze_photos
+from alerts import send_alerts
 
 os.makedirs("logs", exist_ok=True)
 
@@ -98,6 +99,9 @@ def main():
 
     export.export_csv(final)
     export.export_json(final)
+
+    # 9. Alertas
+    send_alerts(final)
 
     logger.info(f"=== Run completo: {len(final)} listings activos ===")
 

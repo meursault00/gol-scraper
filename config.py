@@ -1,5 +1,7 @@
 """Configuración global del scraper."""
 
+import os
+
 # Feature flags
 ENABLE_PHOTO_ANALYSIS = False  # Análisis de fotos con Claude API
 
@@ -37,3 +39,9 @@ DOLAR_API_URL = "https://dolarapi.com/v1/dolares/blue"
 
 # Claude API
 PHOTO_ANALYSIS_MODEL = "claude-sonnet-4-20250514"
+
+# Alertas
+ENABLE_ALERTS = False
+ALERT_SCORE_THRESHOLD = 0.8
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
