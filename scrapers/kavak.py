@@ -74,9 +74,11 @@ class KavakScraper(BaseScraper):
     def _extract_data(self, html: str) -> Optional[dict]:
         """Extrae datos de listings del HTML de Kavak.
 
-        Busca el JSON embebido en __NEXT_DATA__ o en scripts del SPA.
+        Kavak usa Next.js streaming (self.__next_f.push()) en vez del
+        clásico __NEXT_DATA__. Los datos de autos vienen embebidos en
+        esos chunks como JSON serializado.
         """
-        # Buscar __NEXT_DATA__ (Next.js hydration data)
+        # Método 1: Buscar __NEXT_DATA__ clásico
         match = re.search(
             r'<script[^>]*id="__NEXT_DATA__"[^>]*>(.*?)</script>',
             html,
@@ -86,32 +88,90 @@ class KavakScraper(BaseScraper):
             try:
                 next_data = json.loads(match.group(1))
                 page_props = next_data.get("props", {}).get("pageProps", {})
-
-                # Extraer cars y paginación del catálogo
                 catalog = page_props.get("catalog", page_props)
                 cars = catalog.get("cars", [])
-                total_pages = catalog.get("totalPages", 1)
-
                 if cars:
-                    return {"cars": cars, "totalPages": total_pages}
+                    return {"cars": cars, "totalPages": catalog.get("totalPages", 1)}
             except (json.JSONDecodeError, KeyError) as e:
-                logger.warning(f"Error parseando __NEXT_DATA__: {e}")
+                logger.debug(f"__NEXT_DATA__ no usable: {e}")
 
-        # Fallback: buscar datos JSON en scripts genéricos
-        for pattern in [
-            r'"cars"\s*:\s*(\[.*?\])\s*[,}]',
-            r'inventory["\']?\s*:\s*(\[.*?\])',
-        ]:
-            match = re.search(pattern, html, re.DOTALL)
-            if match:
-                try:
-                    cars = json.loads(match.group(1))
-                    if cars:
-                        return {"cars": cars, "totalPages": 1}
-                except json.JSONDecodeError:
-                    continue
+        # Método 2: Next.js streaming — extraer chunks de self.__next_f.push()
+        cars = self._extract_from_streaming(html)
+        if cars:
+            return {"cars": cars, "totalPages": 1}
+
+        # Método 3: Buscar "cars":[ directamente en el HTML
+        match = re.search(r'"cars"\s*:\s*(\[(?:\{.*?\}(?:\s*,\s*\{.*?\})*)\])', html, re.DOTALL)
+        if match:
+            try:
+                cars = json.loads(match.group(1))
+                if cars:
+                    return {"cars": cars, "totalPages": 1}
+            except json.JSONDecodeError:
+                pass
 
         logger.warning("No se encontraron datos de listings en la página de Kavak")
+        return None
+
+    def _extract_from_streaming(self, html: str) -> list[dict]:
+        """Extrae listings del formato RSC (React Server Components) de Next.js.
+
+        Los datos vienen con comillas escapadas (\\") dentro de strings JS.
+        Primero desescapamos y luego buscamos el array "cars".
+        """
+        # El JSON está escaped: \\" → ", \\/ → /
+        unescaped = html.replace('\\"', '"').replace("\\\\", "\\")
+
+        match = re.search(r'"cars"\s*:\s*\[', unescaped)
+        if not match:
+            return []
+
+        start = match.start() + match.group().index("[")
+        cars_json = self._extract_balanced(unescaped, start, "[", "]")
+        if not cars_json:
+            return []
+
+        try:
+            cars = json.loads(cars_json)
+            if isinstance(cars, list):
+                return [c for c in cars if isinstance(c, dict) and c.get("id")]
+        except json.JSONDecodeError:
+            logger.debug("Error parseando cars JSON del streaming")
+
+        return []
+
+    @staticmethod
+    def _extract_balanced(text: str, start: int, open_ch: str, close_ch: str) -> Optional[str]:
+        """Extrae un bloque balanceado de open_ch/close_ch desde start."""
+        if start >= len(text) or text[start] != open_ch:
+            # Buscar el primer open_ch desde start
+            idx = text.find(open_ch, start)
+            if idx == -1:
+                return None
+            start = idx
+
+        depth = 0
+        in_string = False
+        escape = False
+        for i in range(start, min(start + 500_000, len(text))):
+            ch = text[i]
+            if escape:
+                escape = False
+                continue
+            if ch == "\\":
+                escape = True
+                continue
+            if ch == '"':
+                in_string = not in_string
+                continue
+            if in_string:
+                continue
+            if ch == open_ch:
+                depth += 1
+            elif ch == close_ch:
+                depth -= 1
+                if depth == 0:
+                    return text[start:i + 1]
         return None
 
     def _parse_item(self, item: dict) -> Optional[dict]:
